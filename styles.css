@@ -1,0 +1,81 @@
+:root {
+      --fondo: #e9eef5;
+      --tinta: #14213d;
+      --caja-a: #ffffff;
+      --caja-b: #d7e3f4;
+      --acento: #f2a541;
+      --solucion: #1b7f79;
+      --error: #c0392b;
+    }
+
+    body {
+      font-family: 'Outfit', system-ui, sans-serif;
+      background: var(--fondo);
+      color: var(--tinta);
+      min-height: 100vh;
+    }
+
+    h1 { font-weight: 700; letter-spacing: -0.02em; }
+
+    .tablero {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      width: min(100%, 400px);
+      aspect-ratio: 1 / 1;
+      margin-inline: auto;
+      border: 4px solid var(--tinta);
+      border-radius: 12px;
+      overflow: hidden;
+      background: var(--tinta);
+      gap: 1px;
+    }
+
+    .celda {
+      width: 100%;
+      height: 100%;
+      min-width: 0;
+      border: 0;
+      border-radius: 0;
+      text-align: center;
+      font-size: clamp(1.6rem, 9vw, 2.6rem);
+      font-weight: 600;
+      color: var(--tinta);
+      caret-color: var(--acento);
+      padding: 0;
+    }
+
+    .caja-a { background: var(--caja-a); }
+    .caja-b { background: var(--caja-b); }
+
+    .celda[data-col="1"]  { border-right: 3px solid var(--tinta); }
+    .celda[data-fila="1"] { border-bottom: 3px solid var(--tinta); }
+    
+    .celda:focus {
+      outline: 3px solid var(--acento);
+      outline-offset: -3px;
+      z-index: 2;
+    }
+
+    .celda.resuelta { color: var(--solucion); }
+    .celda.error    { color: var(--error); background: #fbe3e0; }
+
+    /* ---------- Botones ---------- */
+    .btn-resolver {
+      background: var(--tinta);
+      color: #fff;
+      font-weight: 600;
+    }
+    .btn-resolver:hover, .btn-resolver:focus-visible { background: #0b1428; color: #fff; }
+
+    .btn-outline-tinta {
+      border: 2px solid var(--tinta);
+      color: var(--tinta);
+      font-weight: 600;
+    }
+    .btn-outline-tinta:hover { background: var(--tinta); color: #fff; }
+
+    .panel {
+      background: #fff;
+      border-radius: 16px;
+      border-left: 6px solid var(--acento);
+    }
