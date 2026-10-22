@@ -4,7 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Resolvedor de Sudoku 4×4</title>
+
+  <!-- Bootstrap 5 -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Tipografía -->
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -50,7 +53,7 @@
         </div>
       </section>
 
-      <!--  Controles -->
+      <!-- ===== Controles ===== -->
       <section class="col-12 col-md-8 col-lg-5">
         <div class="panel p-4 shadow-sm">
           <h2 class="h5 fw-bold mb-3">Cómo se juega</h2>
@@ -70,6 +73,7 @@
           <div id="mensaje" class="alert mt-3 mb-0 d-none" role="status"></div>
         </div>
 
+        <!-- Explicación del modelo de Investigación de Operaciones -->
         <div class="accordion mt-3" id="acordeonModelo">
           <div class="accordion-item border-0 rounded-4 shadow-sm overflow-hidden">
             <h2 class="accordion-header">
@@ -85,10 +89,10 @@
                   <li>Renglones: los números 1, 2, 3 y 4.</li>
                   <li>Columnas: las 4 columnas de la fila.</li>
                   <li>Costo <code>0</code>: el número puede ir en esa columna.</li>
-                  <li>Costo <code>M</code> (muy grande): no puede ir (choca con una columna, una caja o una pista).</li>
+                  <li>Costo <code>1</code>: el número no puede ir (choca con una columna, una caja o una pista).</li>
                 </ul>
                 <p class="mb-2">Se aplica el método húngaro: restar el mínimo de cada renglón y de cada columna, asignar con ceros y, si no alcanza, cubrir los ceros con líneas y ajustar la matriz.</p>
-                <p class="mb-0">Si el costo mínimo es 0, la fila queda llena y se pasa a la siguiente. Si es M, se vuelve a la fila anterior y se busca otra asignación de costo 0.</p>
+                <p class="mb-0">Si el costo mínimo es 0, la fila queda llena y se pasa a la siguiente. Si es mayor que 0, se vuelve a la fila anterior y se busca otra asignación de costo 0.</p>
               </div>
             </div>
           </div>
@@ -109,10 +113,10 @@
            • "Trabajadores"  → los números 1, 2, 3, 4
            • "Tareas"        → las columnas 0, 1, 2, 3
            • Costo 0         → el número SÍ puede ir en esa columna
-           • Costo M (1000)  → el número NO puede ir (ya está en la columna,
+           • Costo 1         → el número NO puede ir (ya está en la columna,
                                en la caja, o choca con una pista)
          Si el costo mínimo de la asignación es 0, la fila quedó bien llena.
-         Si es ≥ M, no hay forma de llenarla: se retrocede a la fila anterior.
+         Si es mayor que 0, no hay forma de llenarla: se retrocede a la fila anterior.
 
        Flujo:
          fila 0 → método húngaro → fila 1 → método húngaro → ... → fila 3
@@ -122,7 +126,7 @@
 
     const TAMANO = 4;      // tablero de 4×4
     const CAJA = 2;        // cajas de 2×2
-    const M = 1000;        // costo "prohibido" (método de penalización)
+    const PROHIBIDO = 1;   // costo de una asignación prohibida (0 = permitida)
 
     // Contadores para mostrar cuánto trabajó el algoritmo.
     let estadisticas = { asignaciones: 0, ajustes: 0, retrocesos: 0 };
@@ -248,10 +252,10 @@
           const n = k + 1;
           if (pistas[f][c] !== 0) {
             // La celda ya tiene una pista: solo ese número puede ir ahí
-            fila.push(pistas[f][c] === n ? 0 : M);
+            fila.push(pistas[f][c] === n ? 0 : PROHIBIDO);
           } else {
             // Costo 0 si el número no choca con su fila, columna ni caja
-            fila.push(esValido(tablero, f, c, n) ? 0 : M);
+            fila.push(esValido(tablero, f, c, n) ? 0 : PROHIBIDO);
           }
         }
         costo.push(fila);
@@ -274,7 +278,7 @@
     function explorarAsignaciones(tablero, pistas, f, costo) {
       estadisticas.asignaciones++;
       const resultado = hungaro(costo);
-      if (resultado.costo >= M) return false;             // la fila no se puede llenar
+      if (resultado.costo > 0) return false;              // la fila no se puede llenar
 
       // Escribir la fila en el tablero
       const asignacion = resultado.asignacion;            // asignacion[k] = columna del número k+1
@@ -289,13 +293,13 @@
       const acumulado = costo.map(fila => fila.slice());
       for (let k = 0; k < TAMANO; k++) {
         const sub = acumulado.map(fila => fila.slice());
-        sub[k][asignacion[k]] = M;                        // prohibir esta asignación
+        sub[k][asignacion[k]] = PROHIBIDO;                // prohibir esta asignación
         if (explorarAsignaciones(tablero, pistas, f, sub)) return true;
 
         // Para las siguientes alternativas, esta asignación queda forzada
         for (let j = 0; j < TAMANO; j++) {
-          if (j !== asignacion[k]) acumulado[k][j] = M;
-          if (j !== k) acumulado[j][asignacion[k]] = M;
+          if (j !== asignacion[k]) acumulado[k][j] = PROHIBIDO;
+          if (j !== k) acumulado[j][asignacion[k]] = PROHIBIDO;
         }
       }
       return false;
