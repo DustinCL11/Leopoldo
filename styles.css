@@ -17,6 +17,7 @@
 
     h1 { font-weight: 700; letter-spacing: -0.02em; }
 
+    /* ---------- Tablero ---------- */
     .tablero {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
@@ -44,18 +45,21 @@
       padding: 0;
     }
 
+    /* Las cajas de 2×2 se distinguen por color alterno */
     .caja-a { background: var(--caja-a); }
     .caja-b { background: var(--caja-b); }
 
+    /* Línea gruesa que separa las cajas */
     .celda[data-col="1"]  { border-right: 3px solid var(--tinta); }
     .celda[data-fila="1"] { border-bottom: 3px solid var(--tinta); }
-    
+
     .celda:focus {
       outline: 3px solid var(--acento);
       outline-offset: -3px;
       z-index: 2;
     }
 
+    /* Estados que puedes aplicar desde JavaScript */
     .celda.resuelta { color: var(--solucion); }
     .celda.error    { color: var(--error); background: #fbe3e0; }
 
