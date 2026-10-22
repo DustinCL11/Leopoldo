@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Resolvedor de Sudoku 4×4</title>
-
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
@@ -15,11 +14,12 @@
 
     <header class="text-center mb-4 mb-lg-5">
       <h1 class="display-5 mb-2">Sudoku 4×4</h1>
-      <p class="lead mb-0">Escribe los números que ya conoces y deja que el algoritmo complete el resto.</p>
+      <p class="lead mb-0">Escribe los números que ya conoces y deja que el método húngaro complete el resto.</p>
     </header>
 
     <div class="row g-4 align-items-center justify-content-center">
 
+      <!-- ===== Tablero ===== -->
       <section class="col-12 col-lg-6" aria-label="Tablero de sudoku">
         <div class="tablero" id="tablero">
 
@@ -50,7 +50,7 @@
         </div>
       </section>
 
-      <!-- ===== Controles ===== -->
+      <!--  Controles -->
       <section class="col-12 col-md-8 col-lg-5">
         <div class="panel p-4 shadow-sm">
           <h2 class="h5 fw-bold mb-3">Cómo se juega</h2>
@@ -69,6 +69,30 @@
           <!-- Aquí se muestran los mensajes (éxito, error, sin solución) -->
           <div id="mensaje" class="alert mt-3 mb-0 d-none" role="status"></div>
         </div>
+
+        <div class="accordion mt-3" id="acordeonModelo">
+          <div class="accordion-item border-0 rounded-4 shadow-sm overflow-hidden">
+            <h2 class="accordion-header">
+              <button class="accordion-button collapsed fw-semibold" type="button" data-bs-toggle="collapse" data-bs-target="#modelo" aria-expanded="false" aria-controls="modelo">
+                Ver cómo funciona el método
+              </button>
+            </h2>
+            <div id="modelo" class="accordion-collapse collapse" data-bs-parent="#acordeonModelo">
+              <div class="accordion-body small">
+                <p class="mb-2"><strong>Modelo de asignación (método húngaro)</strong></p>
+                <p class="mb-2">Cada <strong>fila</strong> del sudoku es un problema de asignación de 4×4:</p>
+                <ul class="ps-3 mb-2">
+                  <li>Renglones: los números 1, 2, 3 y 4.</li>
+                  <li>Columnas: las 4 columnas de la fila.</li>
+                  <li>Costo <code>0</code>: el número puede ir en esa columna.</li>
+                  <li>Costo <code>M</code> (muy grande): no puede ir (choca con una columna, una caja o una pista).</li>
+                </ul>
+                <p class="mb-2">Se aplica el método húngaro: restar el mínimo de cada renglón y de cada columna, asignar con ceros y, si no alcanza, cubrir los ceros con líneas y ajustar la matriz.</p>
+                <p class="mb-0">Si el costo mínimo es 0, la fila queda llena y se pasa a la siguiente. Si es M, se vuelve a la fila anterior y se busca otra asignación de costo 0.</p>
+              </div>
+            </div>
+          </div>
+        </div>
       </section>
 
     </div>
@@ -76,298 +100,253 @@
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
-   <script>
+  <script>
     /* =====================================================================
-       SUDOKU 4×4 CON PROGRAMACIÓN LINEAL ENTERA (INVESTIGACIÓN DE OPERACIONES)
+       SUDOKU 4×4 CON EL MÉTODO HÚNGARO (MODELO DE ASIGNACIÓN)
        ---------------------------------------------------------------------
-       Modelo:
-         Variable binaria  x[f][c][n] = 1  si la celda (f, c) contiene el número n.
-         Restricciones (todas de igualdad, lado derecho = 1):
-           1) Cada celda tiene exactamente un número.
-           2) Cada número aparece exactamente una vez en cada fila.
-           3) Cada número aparece exactamente una vez en cada columna.
-           4) Cada número aparece exactamente una vez en cada caja de 2×2.
-           5) Las pistas del usuario fijan x[f][c][n] = 1.
-         Es un problema de factibilidad (función objetivo = 0).
- 
-       Método de solución:
-         • Relajación lineal (0 ≤ x ≤ 1) resuelta con el método Simplex (Fase 1).
-         • Si la solución tiene valores fraccionarios, se aplica Ramificación y
-           Acotamiento (Branch & Bound): se fija una variable fraccionaria en 1 y
-           luego en 0, y se resuelve de nuevo cada subproblema.
+       Idea:
+         Cada fila del sudoku es un problema de asignación de 4×4:
+           • "Trabajadores"  → los números 1, 2, 3, 4
+           • "Tareas"        → las columnas 0, 1, 2, 3
+           • Costo 0         → el número SÍ puede ir en esa columna
+           • Costo M (1000)  → el número NO puede ir (ya está en la columna,
+                               en la caja, o choca con una pista)
+         Si el costo mínimo de la asignación es 0, la fila quedó bien llena.
+         Si es ≥ M, no hay forma de llenarla: se retrocede a la fila anterior.
+
+       Flujo:
+         fila 0 → método húngaro → fila 1 → método húngaro → ... → fila 3
+         Si una fila no tiene solución, se vuelve atrás y se busca OTRA
+         asignación de costo 0 para la fila anterior.
        ===================================================================== */
- 
-    const TAMANO = 4;                         // tablero de 4×4
-    const CAJA = 2;                           // cajas de 2×2
-    const NUM_VARS = TAMANO * TAMANO * TAMANO; // 64 variables binarias
-    const EPS = 1e-7;                         // tolerancia numérica
- 
+
+    const TAMANO = 4;      // tablero de 4×4
+    const CAJA = 2;        // cajas de 2×2
+    const M = 1000;        // costo "prohibido" (método de penalización)
+
     // Contadores para mostrar cuánto trabajó el algoritmo.
-    let estadisticas = { nodos: 0, pivotes: 0 };
- 
-    // Índice de la variable x[f][c][n] (n va de 1 a 4).
-    function indiceVar(f, c, n) {
-      return (f * TAMANO + c) * TAMANO + (n - 1);
-    }
- 
-    // Construye las 64 restricciones de igualdad. Cada una es la lista de
-    // variables cuya suma debe valer 1.
-    function construirRestricciones() {
-      const filas = [];
-      const numeros = [1, 2, 3, 4];
- 
-      // 1) Una celda, un número
-      for (let f = 0; f < TAMANO; f++)
-        for (let c = 0; c < TAMANO; c++)
-          filas.push(numeros.map(n => indiceVar(f, c, n)));
- 
-      // 2) Un número una vez por fila
-      for (let f = 0; f < TAMANO; f++)
-        for (const n of numeros)
-          filas.push([0, 1, 2, 3].map(c => indiceVar(f, c, n)));
- 
-      // 3) Un número una vez por columna
-      for (let c = 0; c < TAMANO; c++)
-        for (const n of numeros)
-          filas.push([0, 1, 2, 3].map(f => indiceVar(f, c, n)));
- 
-      // 4) Un número una vez por caja de 2×2
-      for (let bf = 0; bf < TAMANO; bf += CAJA)
-        for (let bc = 0; bc < TAMANO; bc += CAJA)
-          for (const n of numeros) {
-            const vars = [];
-            for (let i = 0; i < CAJA; i++)
-              for (let j = 0; j < CAJA; j++)
-                vars.push(indiceVar(bf + i, bc + j, n));
-            filas.push(vars);
-          }
- 
-      return filas;
-    }
- 
-    const RESTRICCIONES = construirRestricciones();
- 
-    // ---------------------------------------------------------------------
-    // SIMPLEX (Fase 1): encuentra una solución básica factible de A·x = b, x ≥ 0
-    // Se agrega una variable artificial por restricción y se minimiza su suma.
-    // Usa la regla de Bland para evitar ciclos. Devuelve x o null si es infactible.
-    // ---------------------------------------------------------------------
-    function simplexFase1(A, b, n) {
-      const m = A.length;
-      const ancho = n + m + 1;               // variables + artificiales + lado derecho
- 
-      // Tabla simplex inicial
-      const T = A.map((fila, i) => {
-        const r = new Array(ancho).fill(0);
-        for (let j = 0; j < n; j++) r[j] = fila[j];
-        r[n + i] = 1;
-        r[ancho - 1] = b[i];
-        return r;
-      });
-      const base = T.map((_, i) => n + i);   // variables básicas (artificiales)
- 
-      // Fila de costos reducidos
-      const z = new Array(ancho).fill(0);
-      for (let j = 0; j < n; j++) {
-        let s = 0;
-        for (let i = 0; i < m; i++) s += T[i][j];
-        z[j] = -s;
+    let estadisticas = { asignaciones: 0, ajustes: 0, retrocesos: 0 };
+
+    /* ---------------------------------------------------------------------
+       MÉTODO HÚNGARO
+       Recibe una matriz de costos n×n y devuelve la asignación óptima:
+         { asignacion: [columna asignada a cada renglón], costo: costo total }
+       Pasos (los mismos que en clase):
+         1) Restar el mínimo de cada renglón.
+         2) Restar el mínimo de cada columna.
+         3) Buscar una asignación usando solo ceros.
+            • Si se asignan los n renglones → listo.
+            • Si no → cubrir los ceros con el mínimo de líneas, restar el menor
+              valor no cubierto a los no cubiertos y sumarlo a las intersecciones.
+            • Repetir el paso 3.
+       --------------------------------------------------------------------- */
+    function hungaro(costoOriginal) {
+      const n = costoOriginal.length;
+      const c = costoOriginal.map(fila => fila.slice());
+
+      // Paso 1: restar el mínimo de cada renglón
+      for (let i = 0; i < n; i++) {
+        const minimo = Math.min(...c[i]);
+        for (let j = 0; j < n; j++) c[i][j] -= minimo;
       }
-      z[ancho - 1] = -b.reduce((a, v) => a + v, 0);
- 
+
+      // Paso 2: restar el mínimo de cada columna
+      for (let j = 0; j < n; j++) {
+        let minimo = Infinity;
+        for (let i = 0; i < n; i++) minimo = Math.min(minimo, c[i][j]);
+        for (let i = 0; i < n; i++) c[i][j] -= minimo;
+      }
+
+      // Paso 3: asignar con ceros; si no alcanza, ajustar la matriz
+      let emparejamiento;
       while (true) {
-        // Variable que entra: la de menor índice con costo reducido negativo
-        let col = -1;
-        for (let j = 0; j < n; j++) {
-          if (z[j] < -EPS) { col = j; break; }
+        emparejamiento = emparejarCeros(c);
+        if (emparejamiento.tamano === n) break;          // asignación completa
+
+        // Cubrir todos los ceros con el mínimo de líneas (teorema de König)
+        const marcaFila = new Array(n).fill(false);
+        const marcaCol = new Array(n).fill(false);
+        for (let i = 0; i < n; i++) {
+          if (emparejamiento.filaACol[i] === -1) marcaFila[i] = true;  // renglones sin asignar
         }
-        if (col === -1) break;               // óptimo
- 
-        // Variable que sale: prueba de razón mínima
-        let fila = -1, mejor = Infinity;
-        for (let i = 0; i < m; i++) {
-          if (T[i][col] > EPS) {
-            const razon = T[i][ancho - 1] / T[i][col];
-            if (razon < mejor - EPS ||
-               (Math.abs(razon - mejor) <= EPS && base[i] < base[fila])) {
-              mejor = razon;
-              fila = i;
+        let cambio = true;
+        while (cambio) {
+          cambio = false;
+          for (let i = 0; i < n; i++) {
+            if (!marcaFila[i]) continue;
+            for (let j = 0; j < n; j++) {
+              if (c[i][j] === 0 && !marcaCol[j]) {
+                marcaCol[j] = true;
+                cambio = true;
+                const f = emparejamiento.colAFila[j];
+                if (f !== -1) marcaFila[f] = true;
+              }
             }
           }
         }
-        if (fila === -1) return null;        // no acotado (no debería ocurrir)
- 
-        pivotear(T, z, fila, col);
-        base[fila] = col;
-        estadisticas.pivotes++;
-      }
- 
-      // Si las artificiales no llegaron a 0, el sistema no tiene solución
-      if (-z[ancho - 1] > 1e-6) return null;
- 
-      const x = new Array(n).fill(0);
-      for (let i = 0; i < m; i++) {
-        if (base[i] < n) x[base[i]] = T[i][ancho - 1];
-      }
-      return x;
-    }
- 
-    // Operación de pivoteo sobre la tabla simplex.
-    function pivotear(T, z, r, c) {
-      const ancho = z.length;
-      const p = T[r][c];
-      for (let j = 0; j < ancho; j++) T[r][j] /= p;
-      for (let i = 0; i < T.length; i++) {
-        if (i === r) continue;
-        const f = T[i][c];
-        if (f !== 0) for (let j = 0; j < ancho; j++) T[i][j] -= f * T[r][j];
-      }
-      const fz = z[c];
-      if (fz !== 0) for (let j = 0; j < ancho; j++) z[j] -= fz * T[r][j];
-    }
- 
-    // ---------------------------------------------------------------------
-    // Relajación lineal de un nodo.
-    // 'fijas[v]' vale 1 o 0 si la variable está fija, y -1 si es libre.
-    // Devuelve un vector de 64 valores en [0,1] o null si el nodo es infactible.
-    // ---------------------------------------------------------------------
-    function resolverRelajacion(fijas) {
-      // Columnas del LP = variables libres
-      const columna = new Array(NUM_VARS).fill(-1);
-      let n = 0;
-      for (let v = 0; v < NUM_VARS; v++) if (fijas[v] === -1) columna[v] = n++;
- 
-      // Restricciones: se pasan al lado derecho las variables ya fijadas
-      const A = [], b = [];
-      for (const vars of RESTRICCIONES) {
-        let rhs = 1;
-        const fila = new Array(n).fill(0);
-        let hayLibres = false;
-        for (const v of vars) {
-          if (fijas[v] === 1) rhs -= 1;
-          else if (fijas[v] === -1) { fila[columna[v]] = 1; hayLibres = true; }
-        }
-        if (rhs < 0) return null;            // dos variables fijas en 1 en la misma restricción
-        if (!hayLibres) {
-          if (rhs !== 0) return null;        // restricción imposible de cumplir
-          continue;                          // restricción ya satisfecha
-        }
-        A.push(fila);
-        b.push(rhs);
-      }
- 
-      let xLibres = [];
-      if (n > 0 && A.length > 0) {
-        xLibres = simplexFase1(A, b, n);
-        if (!xLibres) return null;
-      } else if (n > 0) {
-        xLibres = new Array(n).fill(0);
-      }
- 
-      // Vector completo de 64 variables
-      return fijas.map((valor, v) => (valor === -1 ? xLibres[columna[v]] : valor));
-    }
- 
-    // ---------------------------------------------------------------------
-    // RAMIFICACIÓN Y ACOTAMIENTO (búsqueda en profundidad)
-    // ---------------------------------------------------------------------
-    function ramificarYAcotar(fijas) {
-      estadisticas.nodos++;
- 
-      const x = resolverRelajacion(fijas);
-      if (!x) return null;                   // nodo infactible: se poda
- 
-      // Buscar una variable fraccionaria
-      let fraccionaria = -1;
-      for (let v = 0; v < NUM_VARS; v++) {
-        if (x[v] > EPS && x[v] < 1 - EPS) { fraccionaria = v; break; }
-      }
-      if (fraccionaria === -1) return x;     // solución entera: listo
- 
-      // Dos ramas: x = 1 y x = 0
-      for (const valor of [1, 0]) {
-        const hijas = fijas.slice();
-        hijas[fraccionaria] = valor;
-        const resultado = ramificarYAcotar(hijas);
-        if (resultado) return resultado;
-      }
-      return null;
-    }
- 
-    // Recibe la matriz 4×4 (0 = vacío) y devuelve la matriz resuelta o null.
-    function resolverSudoku(tablero) {
-      estadisticas = { nodos: 0, pivotes: 0 };
- 
-      // Variables fijas según las pistas del usuario
-      const fijas = new Array(NUM_VARS).fill(-1);
-      for (let f = 0; f < TAMANO; f++) {
-        for (let c = 0; c < TAMANO; c++) {
-          const pista = tablero[f][c];
-          if (pista === 0) continue;
-          for (let n = 1; n <= TAMANO; n++) {
-            fijas[indiceVar(f, c, n)] = (n === pista) ? 1 : 0;
+        // Líneas: renglones NO marcados y columnas marcadas.
+        // Valor mínimo de las celdas que no están cubiertas por ninguna línea.
+        let delta = Infinity;
+        for (let i = 0; i < n; i++)
+          for (let j = 0; j < n; j++)
+            if (marcaFila[i] && !marcaCol[j]) delta = Math.min(delta, c[i][j]);
+
+        // Restar a las no cubiertas, sumar a las que tienen dos líneas
+        for (let i = 0; i < n; i++) {
+          for (let j = 0; j < n; j++) {
+            const filaCubierta = !marcaFila[i];
+            const colCubierta = marcaCol[j];
+            if (!filaCubierta && !colCubierta) c[i][j] -= delta;
+            else if (filaCubierta && colCubierta) c[i][j] += delta;
           }
         }
+        estadisticas.ajustes++;
       }
- 
-      const x = ramificarYAcotar(fijas);
-      if (!x) return null;
- 
-      // Convertir el vector de variables binarias en la matriz 4×4
-      const solucion = [];
-      for (let f = 0; f < TAMANO; f++) {
+
+      // El costo se calcula con la matriz ORIGINAL
+      let costo = 0;
+      for (let i = 0; i < n; i++) costo += costoOriginal[i][emparejamiento.filaACol[i]];
+      return { asignacion: emparejamiento.filaACol, costo };
+    }
+
+    // Busca el mayor número de asignaciones posibles usando solo las celdas
+    // con costo 0 (caminos de aumento).
+    function emparejarCeros(c) {
+      const n = c.length;
+      const filaACol = new Array(n).fill(-1);
+      const colAFila = new Array(n).fill(-1);
+
+      function intentar(i, visitadas) {
+        for (let j = 0; j < n; j++) {
+          if (c[i][j] !== 0 || visitadas[j]) continue;
+          visitadas[j] = true;
+          if (colAFila[j] === -1 || intentar(colAFila[j], visitadas)) {
+            filaACol[i] = j;
+            colAFila[j] = i;
+            return true;
+          }
+        }
+        return false;
+      }
+
+      let tamano = 0;
+      for (let i = 0; i < n; i++) {
+        if (intentar(i, new Array(n).fill(false))) tamano++;
+      }
+      return { filaACol, colAFila, tamano };
+    }
+
+    /* ---------------------------------------------------------------------
+       MATRIZ DE COSTOS DE UNA FILA DEL SUDOKU
+       costo[k][c] = costo de poner el número (k+1) en la columna c de la fila f
+       --------------------------------------------------------------------- */
+    function construirCostos(tablero, pistas, f) {
+      const costo = [];
+      for (let k = 0; k < TAMANO; k++) {
         const fila = [];
         for (let c = 0; c < TAMANO; c++) {
-          let numero = 0;
-          for (let n = 1; n <= TAMANO; n++) {
-            if (x[indiceVar(f, c, n)] > 0.5) numero = n;
+          const n = k + 1;
+          if (pistas[f][c] !== 0) {
+            // La celda ya tiene una pista: solo ese número puede ir ahí
+            fila.push(pistas[f][c] === n ? 0 : M);
+          } else {
+            // Costo 0 si el número no choca con su fila, columna ni caja
+            fila.push(esValido(tablero, f, c, n) ? 0 : M);
           }
-          fila.push(numero);
         }
-        solucion.push(fila);
+        costo.push(fila);
       }
-      return solucion;
+      return costo;
     }
- 
+
+    /* ---------------------------------------------------------------------
+       RESOLVER FILA POR FILA
+       --------------------------------------------------------------------- */
+    function resolverFila(tablero, pistas, f) {
+      if (f === TAMANO) return true;                      // todas las filas listas
+      const costo = construirCostos(tablero, pistas, f);
+      return explorarAsignaciones(tablero, pistas, f, costo);
+    }
+
+    // Prueba una asignación de costo 0 para la fila f. Si las filas siguientes
+    // fallan, genera otras asignaciones de costo 0 (partición de soluciones):
+    //   alternativa k = conservar las asignaciones 0..k-1 y PROHIBIR la k-ésima.
+    function explorarAsignaciones(tablero, pistas, f, costo) {
+      estadisticas.asignaciones++;
+      const resultado = hungaro(costo);
+      if (resultado.costo >= M) return false;             // la fila no se puede llenar
+
+      // Escribir la fila en el tablero
+      const asignacion = resultado.asignacion;            // asignacion[k] = columna del número k+1
+      for (let k = 0; k < TAMANO; k++) tablero[f][asignacion[k]] = k + 1;
+
+      if (resolverFila(tablero, pistas, f + 1)) return true;
+
+      // Falló una fila posterior: deshacer y buscar otra asignación de esta fila
+      for (let c = 0; c < TAMANO; c++) if (pistas[f][c] === 0) tablero[f][c] = 0;
+      estadisticas.retrocesos++;
+
+      const acumulado = costo.map(fila => fila.slice());
+      for (let k = 0; k < TAMANO; k++) {
+        const sub = acumulado.map(fila => fila.slice());
+        sub[k][asignacion[k]] = M;                        // prohibir esta asignación
+        if (explorarAsignaciones(tablero, pistas, f, sub)) return true;
+
+        // Para las siguientes alternativas, esta asignación queda forzada
+        for (let j = 0; j < TAMANO; j++) {
+          if (j !== asignacion[k]) acumulado[k][j] = M;
+          if (j !== k) acumulado[j][asignacion[k]] = M;
+        }
+      }
+      return false;
+    }
+
+    // Recibe la matriz 4×4 (0 = vacío) y devuelve la matriz resuelta o null.
+    function resolverSudoku(pistas) {
+      estadisticas = { asignaciones: 0, ajustes: 0, retrocesos: 0 };
+      const tablero = pistas.map(fila => fila.slice());
+      return resolverFila(tablero, pistas, 0) ? tablero : null;
+    }
+
     /* =====================================================================
        INTERFAZ (lectura del tablero, mensajes, botones)
        ===================================================================== */
- 
+
     // Solo deja escribir dígitos del 1 al 4 en una celda.
     function soloDigitos(input) {
       input.value = input.value.replace(/[^1-4]/g, '');
     }
- 
+
     function obtenerCelda(f, c) {
       return document.getElementById(`celda-${f}-${c}`);
     }
- 
+
     // Se ejecuta al pulsar "Resolver".
     function resolver() {
       quitarEstados();
       const tablero = leerTablero();
- 
+
       const conflictos = encontrarConflictos(tablero);
       if (conflictos.length > 0) {
         conflictos.forEach(([f, c]) => obtenerCelda(f, c).classList.add('error'));
         mostrarMensaje('Hay números repetidos en una fila, columna o caja. Corrige las celdas en rojo.', 'danger');
         return;
       }
- 
+
       const solucion = resolverSudoku(tablero);
- 
+
       if (!solucion) {
-        mostrarMensaje('El modelo es infactible: este sudoku no tiene solución.', 'warning');
+        mostrarMensaje('Este sudoku no tiene solución. Revisa los números que escribiste.', 'warning');
         return;
       }
       mostrarTablero(solucion, tablero);
       mostrarMensaje(
-        `¡Resuelto con programación lineal entera! Nodos explorados: ${estadisticas.nodos} · ` +
-        `Iteraciones simplex: ${estadisticas.pivotes}.`,
+        `¡Resuelto con el método húngaro! Asignaciones resueltas: ${estadisticas.asignaciones} · ` +
+        `Ajustes de la matriz: ${estadisticas.ajustes} · Retrocesos: ${estadisticas.retrocesos}.`,
         'success'
       );
     }
- 
+
     // Lee los inputs y devuelve una matriz 4×4 (0 = celda vacía).
     function leerTablero() {
       const tablero = [];
@@ -381,7 +360,7 @@
       }
       return tablero;
     }
- 
+
     // ¿El número n en (f, c) choca con otro de su fila, columna o caja?
     function esValido(tablero, f, c, n) {
       for (let i = 0; i < TAMANO; i++) {
@@ -395,7 +374,7 @@
           if (tablero[f0 + i][c0 + j] === n) return false;
       return true;
     }
- 
+
     // Devuelve las celdas [f, c] con números repetidos entre las pistas.
     function encontrarConflictos(tablero) {
       const conflictos = [];
@@ -410,7 +389,7 @@
       }
       return conflictos;
     }
- 
+
     // Escribe la solución y marca en verde las celdas que estaban vacías.
     function mostrarTablero(solucion, original) {
       for (let f = 0; f < TAMANO; f++) {
@@ -421,30 +400,30 @@
         }
       }
     }
- 
+
     // tipo: 'success', 'danger' o 'warning'.
     function mostrarMensaje(texto, tipo) {
       const caja = document.getElementById('mensaje');
       caja.className = `alert alert-${tipo} mt-3 mb-0`;
       caja.textContent = texto;
     }
- 
+
     function ocultarMensaje() {
       const caja = document.getElementById('mensaje');
       caja.className = 'alert mt-3 mb-0 d-none';
       caja.textContent = '';
     }
- 
+
     function quitarEstados() {
       document.querySelectorAll('.celda').forEach(c => c.classList.remove('resuelta', 'error'));
       ocultarMensaje();
     }
- 
+
     function limpiar() {
       document.querySelectorAll('.celda').forEach(c => { c.value = ''; });
       quitarEstados();
     }
- 
+
     function cargarEjemplo() {
       limpiar();
       const ejemplo = [
